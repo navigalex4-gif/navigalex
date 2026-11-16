@@ -25,6 +25,48 @@ type Service = {
   Icon: typeof ShieldCheck;
 };
 
+type ServiceFilter = 'all' | 'back-office' | 'it' | 'advisory';
+type CategoryOffering = { title: string; detail: string };
+type OperationalCategory = {
+  id: 'back-office' | 'it';
+  title: string;
+  strapline: string;
+  summary: string;
+  Icon: typeof ShieldCheck;
+  offerings: CategoryOffering[];
+};
+
+const OPERATIONAL_CATEGORIES: OperationalCategory[] = [
+  {
+    id: 'back-office',
+    title: 'Back Office Support',
+    strapline: 'Reliable day-to-day business operations',
+    summary: 'Practical support for recurring finance administration, people operations, records and office workflows.',
+    Icon: Wallet,
+    offerings: [
+      { title: 'Bookkeeping & records', detail: 'Transaction recording, ledger upkeep, account reconciliations and organised financial records.' },
+      { title: 'Billing & invoicing', detail: 'Invoice preparation, billing schedules, payment follow-ups and receivables administration.' },
+      { title: 'HR & payroll administration', detail: 'Employee records, attendance inputs, payroll preparation and routine HR coordination.' },
+      { title: 'Data processing & reporting', detail: 'Accurate data entry, spreadsheet updates, data checks and recurring operational reports.' },
+      { title: 'General administrative support', detail: 'Document preparation, scheduling, inbox coordination and routine back-office tasks.' }
+    ]
+  },
+  {
+    id: 'it',
+    title: 'IT & Digital Services',
+    strapline: 'Technology that keeps work moving',
+    summary: 'Scoped technical support and delivery for websites, applications, cloud environments and connected business systems.',
+    Icon: Workflow,
+    offerings: [
+      { title: 'IT helpdesk & user support', detail: 'First-line user assistance, issue triage, device and account setup, and support-desk coordination.' },
+      { title: 'Website & app development', detail: 'Business websites, web applications, feature development, maintenance and deployment support.' },
+      { title: 'Cloud infrastructure', detail: 'Cloud environment setup, hosting configuration, monitoring, backups and routine administration.' },
+      { title: 'Workflow automation', detail: 'Automate repetitive tasks, approvals, notifications, data movement and reporting workflows.' },
+      { title: 'Systems integration', detail: 'Connect business applications, APIs, forms, payment flows and reporting tools.' }
+    ]
+  }
+];
+
 export const ADVISORY_DESKS: Service[] = [
   {
     id: 'financial-clarity',
@@ -299,18 +341,46 @@ function readRecommendedService(): string | null {
   return service ? SERVICE_HANDOFFS[service] || null : null;
 }
 
+function readServiceFilter(): ServiceFilter {
+  if (typeof window === 'undefined') return 'all';
+  const category = new URLSearchParams(window.location.search).get('category');
+  return category === 'back-office' || category === 'it' || category === 'advisory' ? category : 'all';
+}
+
 export default function ServicesPage({ onInquiry }: ServicesPageProps) {
   const [query, setQuery] = useState('');
   const [recommendedId, setRecommendedId] = useState<string | null>(readRecommendedService);
+  const [selectedCategory, setSelectedCategory] = useState<ServiceFilter>(() =>
+    readRecommendedService() ? 'advisory' : readServiceFilter()
+  );
 
   const recommendedService = useMemo(
     () => ADVISORY_DESKS.find((service) => service.id === recommendedId) ?? null,
     [recommendedId]
   );
   const RecommendedIcon = recommendedService?.Icon;
+  const showAdvisoryServices = selectedCategory === 'all' || selectedCategory === 'advisory';
+
+  const visibleCategories = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return OPERATIONAL_CATEGORIES
+      .filter((category) => selectedCategory === 'all' || selectedCategory === category.id)
+      .map((category) => ({
+        ...category,
+        offerings: category.offerings.filter((offering) =>
+          !q || [category.title, category.strapline, category.summary, offering.title, offering.detail]
+            .join(' ').toLowerCase().includes(q)
+        )
+      }))
+      .filter((category) =>
+        category.offerings.length > 0 ||
+        (!q && selectedCategory === 'all' && [category.title, category.summary].some((value) => value.toLowerCase().includes(q)))
+      );
+  }, [query, selectedCategory]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
+    if (!showAdvisoryServices) return [];
     return ADVISORY_DESKS.filter((service) =>
       (!recommendedId || service.id === recommendedId) &&
       (!q || [
@@ -323,24 +393,40 @@ export default function ServicesPage({ onInquiry }: ServicesPageProps) {
         ...service.deliverables
       ].join(' ').toLowerCase().includes(q))
     );
-  }, [recommendedId, query]);
+  }, [recommendedId, query, showAdvisoryServices]);
 
   // Do not auto-scroll to the selected service card here.
   // App-level route navigation resets the page to the top, keeping the page header visible.
 
+  const selectCategory = (category: ServiceFilter) => {
+    setQuery('');
+    setRecommendedId(null);
+    setSelectedCategory(category);
+    const params = new URLSearchParams(window.location.search);
+    params.delete('service');
+    if (category === 'all') params.delete('category');
+    else params.set('category', category);
+    const queryString = params.toString();
+    window.history.replaceState(null, '', '/services' + (queryString ? '?' + queryString : ''));
+  };
+
   const selectProblem = (serviceId: string) => {
     setQuery('');
     setRecommendedId(serviceId);
+    setSelectedCategory('advisory');
     const params = new URLSearchParams(window.location.search);
     params.set('service', serviceId);
+    params.set('category', 'advisory');
     window.history.replaceState(null, '', '/services?' + params.toString());
   };
 
   const showAllServices = () => {
     setQuery('');
     setRecommendedId(null);
+    setSelectedCategory('all');
     const params = new URLSearchParams(window.location.search);
     params.delete('service');
+    params.delete('category');
     const queryString = params.toString();
     window.history.replaceState(null, '', '/services' + (queryString ? '?' + queryString : ''));
   };
@@ -349,8 +435,8 @@ export default function ServicesPage({ onInquiry }: ServicesPageProps) {
     <section className="mx-auto max-w-7xl space-y-10 px-4 py-14 sm:px-6 sm:py-20">
       <header className="mx-auto max-w-4xl space-y-4 text-center">
         <span className="text-xs font-bold uppercase tracking-widest text-[#1f4fff]">Navigalex Business Advisory</span>
-        <h2 className="text-3xl font-extrabold tracking-tight text-slate-950 sm:text-5xl">{recommendedService ? "Your recommended starting service" : "Start with the business problem."}</h2>
-        <p className="text-base leading-relaxed text-slate-600 sm:text-lg">{recommendedService ? "Based on the business issue you selected, review the recommendation, what is included, expected timing and scope limits before requesting a proposal." : "Choose the issue closest to yours. Each service shows the practical deliverables, client inputs, timing and boundaries before you request a proposal."}</p>
+        <h2 className="text-3xl font-extrabold tracking-tight text-slate-950 sm:text-5xl">{recommendedService ? "Your recommended starting service" : "Find the support your business needs."}</h2>
+        <p className="text-base leading-relaxed text-slate-600 sm:text-lg">{recommendedService ? "Based on the business issue you selected, review the recommendation, what is included, expected timing and scope limits before requesting a proposal." : "Browse Back Office support, IT & Digital services and business advisory. Filter by category or search for the specific support you need."}</p>
         <div className="flex flex-wrap justify-center gap-3 pt-2 text-xs font-semibold text-slate-600">
           <span className="inline-flex items-center gap-1.5"><ClipboardCheck className="h-4 w-4" />Defined deliverables</span>
           <span className="inline-flex items-center gap-1.5"><Clock3 className="h-4 w-4" />Agreed timelines</span>
@@ -358,6 +444,98 @@ export default function ServicesPage({ onInquiry }: ServicesPageProps) {
         </div>
       </header>
 
+      {!recommendedId && (
+        <section aria-label="Service category filters" className="space-y-5 rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-slate-950">Browse services by category</h3>
+              <p className="text-sm text-slate-600">Choose Back Office, IT or Business Advisory. The service cards below update to match your selection.</p>
+            </div>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter service categories">
+              {([
+                ['all', 'All services'],
+                ['back-office', 'Back Office'],
+                ['it', 'IT'],
+                ['advisory', 'Business Advisory']
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={selectedCategory === value}
+                  onClick={() => selectCategory(value)}
+                  className={selectedCategory === value
+                    ? 'min-h-10 rounded-full bg-[#1f4fff] px-4 py-2 text-sm font-bold text-white shadow-sm'
+                    : 'min-h-10 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50'}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search bookkeeping, payroll, helpdesk, cloud, advisory…"
+              aria-label="Search all service categories"
+              className="w-full min-w-0 py-3 text-base text-slate-950 outline-none"
+            />
+            {(query || selectedCategory !== 'all') && (
+              <button type="button" onClick={showAllServices} className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                Clear
+              </button>
+            )}
+          </label>
+        </section>
+      )}
+
+      {!recommendedId && selectedCategory !== 'advisory' && (
+        <section aria-labelledby="operational-categories-heading" className="space-y-4">
+          <div>
+            <h3 id="operational-categories-heading" className="text-xl font-extrabold text-slate-950">{selectedCategory === 'back-office' ? 'Back Office Support' : selectedCategory === 'it' ? 'IT & Digital Services' : 'Back Office & IT services'}</h3>
+            <p className="mt-1 text-sm leading-relaxed text-slate-600">Practical support for everyday operations and technology delivery, with the exact scope agreed before work begins.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            {visibleCategories.map((category) => {
+              const Icon = category.Icon;
+              return (
+                <article key={category.id} className="flex min-w-0 flex-col rounded-2xl border border-slate-200 border-t-4 border-t-[#1f4fff] bg-white p-5 shadow-sm sm:p-6">
+                  <div className="flex items-start gap-3">
+                    <span className="rounded-xl bg-blue-50 p-3 text-[#1f4fff]"><Icon className="h-6 w-6" /></span>
+                    <div className="min-w-0">
+                      <h4 className="text-xl font-extrabold text-slate-950">{category.title}</h4>
+                      <p className="mt-1 text-sm font-semibold text-[#1f4fff]">{category.strapline}</p>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-600">{category.summary}</p>
+                    </div>
+                  </div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    {category.offerings.map((offering) => (
+                      <div key={offering.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                        <h5 className="text-sm font-bold text-slate-900">{offering.title}</h5>
+                        <p className="mt-1.5 text-xs leading-relaxed text-slate-600">{offering.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onInquiry(category.title)}
+                    className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1f4fff] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#183bc4]"
+                  >
+                    Enquire about {category.title} <ArrowUpRight className="h-4 w-4" />
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+          {visibleCategories.length === 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
+              No Back Office or IT services match that search. Clear the search or choose another category.
+            </div>
+          )}
+        </section>
+      )}
 
       {recommendedService && (
         <section aria-labelledby="recommended-service-heading" className="overflow-hidden rounded-3xl border border-blue-200 bg-white shadow-[0_10px_30px_rgba(31,79,255,0.10)]">
@@ -418,19 +596,14 @@ export default function ServicesPage({ onInquiry }: ServicesPageProps) {
         </section>
       )}
 
-      {!recommendedId && (
+      {!recommendedId && showAdvisoryServices && (
       <>
       <section aria-labelledby="problem-shortcuts-heading" className="space-y-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h3 id="problem-shortcuts-heading" className="text-lg font-bold text-slate-950">What do you need help with?</h3>
-            <p className="text-sm text-slate-600">Choose one to see the closest productised starting service. You can change it or browse all eight.</p>
+            <p className="text-sm text-slate-600">Choose the business issue closest to yours to see a scoped advisory starting service.</p>
           </div>
-          {recommendedId && (
-            <button type="button" onClick={showAllServices} className="self-start text-sm font-semibold text-[#1f4fff] underline underline-offset-2">
-              Show all eleven services
-            </button>
-          )}
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -483,28 +656,10 @@ export default function ServicesPage({ onInquiry }: ServicesPageProps) {
       </>
       )}
 
-      {!recommendedId && (
-      <>
-      <div className="flex flex-col gap-3 md:flex-row md:items-center">
-        <label className="flex min-h-11 flex-1 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3">
-          <Search className="h-4 w-4 text-slate-400" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search services, outcomes or deliverables"
-            aria-label="Search services, outcomes or deliverables"
-            className="w-full py-3 text-base text-slate-950 outline-none"
-          />
-        </label>
-        {(recommendedId || query) && (
-          <button type="button" onClick={showAllServices} className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Clear filters
-          </button>
-        )}
-      </div>
-
-      <p className="text-sm text-slate-600" aria-live="polite">Showing all nine distinct starting services.</p>
-      </>
+      {showAdvisoryServices && !recommendedId && (selectedCategory === 'advisory' || visible.length > 0) && (
+        <p className="text-sm text-slate-600" aria-live="polite">
+          Showing {visible.length} matching business advisory services.
+        </p>
       )}
 
       {recommendedService && (
@@ -518,6 +673,7 @@ export default function ServicesPage({ onInquiry }: ServicesPageProps) {
         </div>
       )}
 
+      {showAdvisoryServices && (
       <div id="service-results" className={recommendedService ? "mx-auto grid w-full max-w-5xl grid-cols-1 gap-6" : "grid grid-cols-1 gap-6 lg:grid-cols-2"}>
         {visible.map((service) => {
           const Icon = service.Icon;
@@ -597,18 +753,21 @@ export default function ServicesPage({ onInquiry }: ServicesPageProps) {
           );
         })}
       </div>
+      )}
 
-      {visible.length === 0 && (
+      {showAdvisoryServices && visible.length === 0 && (selectedCategory === 'advisory' || visibleCategories.length === 0) && (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-8 text-center">
           <p className="text-sm text-slate-600">No service matches that search. Clear the filters or let us help you choose.</p>
           <button type="button" onClick={() => onInquiry('Help me choose the right review')} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1f4fff] px-5 py-3 text-sm font-bold text-white hover:bg-[#183bc4]">Help me choose</button>
         </div>
       )}
 
+      {showAdvisoryServices && (
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
         <h3 className="font-bold text-slate-900">Professional scope and independence</h3>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">Navigalex provides business advisory, operational analysis and technology enablement within the scope agreed with each client. We do not advertise or offer legal services. Legal, tax, statutory audit, certification or other regulated professional work is outside scope unless delivered separately by appropriately qualified and authorised professionals under their own engagement. Recommendations depend on the accuracy and completeness of client-supplied information; outcomes are not guaranteed.</p>
       </div>
+      )}
     </section>
   );
 }

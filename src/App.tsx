@@ -369,6 +369,7 @@ export default function App() {
             {[
               ['home', 'Home'],
               ['home', 'Financial Genie'],
+              ['services', 'Services'],
               ['instant-reports', 'Instant reports'],
                             ['about', 'About'],
               ['contact', 'Contact']
@@ -410,6 +411,7 @@ export default function App() {
               {[
                 ['home', 'Home'],
                 ['home', 'Services in Financial Genie'],
+                ['services', 'Services'],
                 ['instant-reports', 'Instant reports'],
                                 ['about', 'About'],
                 ['contact', 'Contact']
